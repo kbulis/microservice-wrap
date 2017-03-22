@@ -220,11 +220,11 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 	    	    			( "running '" + deserialized.command + "' with request = " + deserialized.request
 	    	    			);
 	            		
-	            		for (final Handled<T> handler : this.hooks)
+	            		for (final Handled<T> handled : this.hooks)
 	            		{
-	            			if (handler != null && handler.command.equalsIgnoreCase(deserialized.command) == true)
+	            			if (handled != null && handled.command.equalsIgnoreCase(deserialized.command) == true)
 	            			{
-	        					Object object = handler.doCommand(containerContext, deserialized.request.toString(), started);
+	        					Object object = handled.doCommand(containerContext, deserialized.request.toString(), started);
 	            				
 	                    		if (object != null)
 	                    		{
