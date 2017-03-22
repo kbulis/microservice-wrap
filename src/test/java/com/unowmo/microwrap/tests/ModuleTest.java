@@ -12,9 +12,21 @@ import com.unowmo.microwrap.*;
  */
 public class ModuleTest {
 
+	private static class MockedApiService extends MultiEndpointApi<MultiEndpointApi.ContainerContext> {
+		@Override
+		public ContainerContext prepareRequestContainer(final String command, final String region, final String config, final MultiEndpointApi.Logging logger) throws IOException {
+			return null;
+		}
+
+		@SuppressWarnings("unchecked")
+		public MockedApiService() {
+			super(new MultiEndpointApi.Handler [0]);
+		}
+	}
+	
     @Test
     public void testModule() {
-    	final MultiEndpointApi handler = new MultiEndpointApi();
+    	final MockedApiService handler = new MockedApiService();
     	final MockedApiContext context = new MockedApiContext();
 
 		System.out.println("Testing...");
@@ -27,9 +39,13 @@ public class ModuleTest {
         	handler.handleRequest
     			( new ByteArrayInputStream
     				( String.format
-						( "{ ''command'': ''getappdetail'', ''request'': { ''o'': { ''options'': ''testing''"
+						( "{ ''command'': ''getappdetail''"
+						+ ", ''request'':"
+						+ " { ''o'':"
+						+ " { ''options'': ''testing''"
 						+ " }"
 						+ " }"
+						+ ", ''trusted'': ''''"
 						+ " }"
     					).replace("''",  "\"").getBytes("utf8")
     				)

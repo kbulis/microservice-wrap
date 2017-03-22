@@ -1,6 +1,7 @@
 package com.unowmo.microwrap;
 
 import java.util.*;
+import java.util.concurrent.*;
 import java.io.*;
 import com.google.gson.*;
 import com.amazonaws.services.lambda.runtime.*;
@@ -13,10 +14,54 @@ import com.amazonaws.services.lambda.runtime.*;
  * @author Kirk Bulis
  *
  */
-public class MultiEndpointApi implements RequestStreamHandler {
+public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerContext> implements RequestStreamHandler {
+	private final Handler<T> [] hooks; 
 
 	/**
+	 * Base container implementation for holding onto request-specific values
+	 * and facilities as part of normal request handling. Container should
+	 * define a default constructor. 
+	 */
+	public static class ContainerContext {
+
+	}
+
+	/**
+	 * Simple logger wrapper for tracing activity during request processing.
+	 */
+	public static class Logging {
+		private final LambdaLogger delegate;
+
+		public Logging log(final String message) {
+			if (this.delegate != null)
+			{
+				this.delegate.log("(" + TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) + ") " + (message != null ? message : "null"));
+			}
+
+			return this;
+		}
+	
+		private Logging(final LambdaLogger delegate) {
+			this.delegate = delegate;
+		}
+
+	}
+	
+	/**
+	 * ...
+	 * 
+	 * @param context
+	 * @param region
+	 * @param config
+	 */
+	public abstract T prepareRequestContainer(final String command, final String region, final String config, final Logging logger) throws IOException;
+	
+	/**
 	 * Actual custom lambda handler hook.
+	 * 
+	 * @param source
+	 * @param target
+	 * @param context
 	 */
 	@Override
 	public final void handleRequest(final InputStream source, final OutputStream target, final Context context) {
@@ -77,6 +122,10 @@ public class MultiEndpointApi implements RequestStreamHandler {
         	// container to consume. Expects json, which is another convention
         	// related to aws implementation, but general enough to prove
         	// useful in a wide range of platforms.
+        	//
+        	// We look for matching request command handlers in the order
+        	// given on construction. This can be optimized, but we don't
+        	// really expect a large set.
 
         	String requesting = "";
         	String responseOf = "";
@@ -112,33 +161,69 @@ public class MultiEndpointApi implements RequestStreamHandler {
         	{
         		Posting deserialized = mapper.fromJson(requesting, Posting.class);
         		Returns object;
+        		Logging logger;
+        		
+        		if (context != null)
+        		{
+        			logger = new Logging(context.getLogger());
+        		}
+        		else
+        		{
+        			logger = new Logging(null);
+        		}
 
+        		object = null;
+        		
         		if (deserialized.command.equalsIgnoreCase("getappdetail") == false)
         		{
-            		context.getLogger().log
+        			final T containerContext = this.prepareRequestContainer(deserialized.command, region, config, logger);
+        			boolean matching = false;
+
+            		logger.log
     	    			( "running '" + deserialized.command + "' with request = " + deserialized.request
     	    			);
-        			
-    	        	//object = this.doSomething(deserialized, context, caching, binding, config, region, vector, secret, started);
-            		object = null;
 
-            		if (object == null)
+            		for (final Handler<T> handler : this.hooks)
             		{
-            			object = new Returns("Null");
+            			if (handler != null && handler.getCommandLabel().equalsIgnoreCase(deserialized.command) == true)
+            			{
+            				matching = true;
+
+        					object = handler.doSomething(containerContext, requesting, started);
+            				
+                    		if (object != null)
+                    		{
+        	    	        	if (object.results.equalsIgnoreCase("success") == false)
+        	    	        	{
+        	                		logger.log
+        	        	    			( "failure '" + object.results + "'"
+        	        	    			);
+        	    	        	}
+        	    	        	else
+        	    	        	{
+        	                		logger.log
+        	        	    			( "success"
+        	        	    			);
+        	    	        	}
+                    		}
+                    		else
+                    		{
+                    			throw new IOException
+                    				( "Handler logic response came back null"
+                    				);
+                    		}
+            			}
             		}
             		
-    	        	if (object.results.equalsIgnoreCase("success") == false)
-    	        	{
-                		context.getLogger().log
-        	    			( "failure '" + object.results + "'"
-        	    			);
-    	        	}
-    	        	else
-    	        	{
-                		context.getLogger().log
-        	    			( "success"
-        	    			);
-    	        	}
+            		if (matching == false)
+            		{
+        				object = new Returns
+        					( String.format
+        						( "command request '%s' not supported"
+        						, deserialized.command
+        						)
+        					);
+            		}
         		}
         		else
         		{
@@ -174,7 +259,10 @@ public class MultiEndpointApi implements RequestStreamHandler {
         			catch (Exception eX)
         			{
         				object = new Returns
-        					( "Failed" + eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
+        					( String.format
+        						( "failed%s"
+        						, eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
+        						)
         					);
         			}
         		}
@@ -232,39 +320,54 @@ public class MultiEndpointApi implements RequestStreamHandler {
 	        {
 	        }
 
-	        context.getLogger().log
-	        	( String.format
-	        		( "Failed%s"
-	        		, eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
-	        		)
-	        	);
+	        if (context != null)
+	        {
+		        context.getLogger().log
+		        	( String.format
+		        		( "failed%s"
+		        		, eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
+		        		)
+		        	);
+	        }
 		}
 	}
-
+	
 	/**
-	 * Container for processing. 
+	 * Base interface for all handler hooks to process requests. 
 	 */
-	static class Posting {
+	public static interface Handler<T extends ContainerContext> {
 
-		String command = "";
-		JsonObject request = null;
+		Returns doSomething(final T context, final String request, final Date started);
+
+		String getCommandLabel();
 
 	}
 
 	/**
 	 * Container for processing. 
 	 */
-	static class Returns {
+	public static class Posting {
 
-		String results = "";
-		Object o = null;
+		public String command = "";
+		public String trusted = "";
+		public JsonObject request = null;
+
+	}
+
+	/**
+	 * Container for processing. 
+	 */
+	public static class Returns {
+
+		public String results = "";
+		public Object o = null;
 		
-		Returns(final String results, final Object o) {
+		public Returns(final String results, final Object o) {
 			this.results = results != null ? results.replace('"', '\'') : "";
 			this.o = o;
 		}
 
-		Returns(final String results) {
+		public Returns(final String results) {
 			this.results = results != null ? results.replace('"', '\'') : "";
 		}
 
@@ -276,12 +379,12 @@ public class MultiEndpointApi implements RequestStreamHandler {
 	/**
 	 * Container for processing. 
 	 */
-	static class Version {
+	public static class Version {
 
-		final String name;
-		final String version;
+		public final String name;
+		public final String version;
 
-		Version(final String name, final String version) {
+		public Version(final String name, final String version) {
 			this.name = name;
 			this.version = version;
 		}
@@ -291,12 +394,13 @@ public class MultiEndpointApi implements RequestStreamHandler {
 	/**
 	 * Construct default.
 	 */
-	public MultiEndpointApi() {
+	public MultiEndpointApi(final Handler<T> [] hooks) {
+		this.hooks = hooks;
 	}
 
 	/**
 	 * Shared facility.
 	 */
-	public static Gson mapper = new Gson();
-	
+	private static Gson mapper = new Gson();
+
 }
