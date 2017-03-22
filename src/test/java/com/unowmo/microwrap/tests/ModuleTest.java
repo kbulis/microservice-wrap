@@ -12,16 +12,29 @@ import com.unowmo.microwrap.*;
  */
 public class ModuleTest {
 
-	private static class MockedApiService extends MultiEndpointApi<MultiEndpointApi.ContainerContext> {
-		@Override
-		public ContainerContext prepareRequestContainer(final String command, final String region, final String config, final MultiEndpointApi.Logging logger) throws IOException {
-			return null;
+	private static class MockedApiService extends MultiEndpointApi<MockedApiService.ServiceContext> {
+		
+		private static abstract class Handler extends MultiEndpointApi.Handled<ServiceContext> {
+
+			public Handler(String commandLabel) {
+				super(commandLabel);
+			}
+
 		}
 
-		@SuppressWarnings("unchecked")
-		public MockedApiService() {
-			super(new MultiEndpointApi.Handler [0]);
+		private static class ServiceContext extends MultiEndpointApi.ContainerContext {
+			
 		}
+		
+		@Override
+		public ServiceContext prepareRequestContainer(final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException {
+			return new ServiceContext();
+		}
+
+		public MockedApiService() {
+			super(new Handler [0]);
+		}
+
 	}
 	
     @Test

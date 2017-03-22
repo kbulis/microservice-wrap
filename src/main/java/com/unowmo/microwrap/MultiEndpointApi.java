@@ -15,7 +15,7 @@ import com.amazonaws.services.lambda.runtime.*;
  *
  */
 public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerContext> implements RequestStreamHandler {
-	private final Handler<T> [] hooks; 
+	private final Handled<T> [] hooks; 
 
 	/**
 	 * Base container implementation for holding onto request-specific values
@@ -24,15 +24,18 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 	 */
 	public static class ContainerContext {
 
+		public Tracer logger = null;
+		public String detail = null;
+
 	}
 
 	/**
 	 * Simple logger wrapper for tracing activity during request processing.
 	 */
-	public static class Logging {
+	public static class Tracer {
 		private final LambdaLogger delegate;
 
-		public Logging log(final String message) {
+		public Tracer log(final String message) {
 			if (this.delegate != null)
 			{
 				this.delegate.log("(" + TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) + ") " + (message != null ? message : "null"));
@@ -41,27 +44,54 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 			return this;
 		}
 	
-		private Logging(final LambdaLogger delegate) {
+		private Tracer(final LambdaLogger delegate) {
 			this.delegate = delegate;
 		}
 
 	}
 	
 	/**
-	 * ...
+	 * Event for container to initialize context details using given environment
+	 * parameters and facilities.
 	 * 
-	 * @param context
-	 * @param region
-	 * @param config
+	 * @param command request command to process
+	 * @param trusted request security token
+	 * @param region location hint for services
+	 * @param config execution configuration
+	 * @param logger logging facility
+	 * @return initialized container context instance
+	 * @throws IOException raised on any error
 	 */
-	public abstract T prepareRequestContainer(final String command, final String region, final String config, final Logging logger) throws IOException;
+	protected abstract T prepareRequestContainer(final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException;
+
+	/**
+	 * Connects and initializes shared context parameters as part of specialized
+	 * request processing at different layers. Implementers must call the super
+	 * form before returning.
+	 * 
+	 * @param context container context being updated
+	 * @param command request command to process
+	 * @param trusted request security token
+	 * @param region location hint for services
+	 * @param config execution configuration
+	 * @param logger logging facility
+	 */
+	protected void fixupRequestContainer(final T context, final String command, final String trusted, final String region, final String config, final Tracer logger) {
+		context.detail = String.format
+			( "Processing '%s' with token '%s' in " + region + " as " + config
+			, command
+			, trusted
+			);
+		
+		context.logger = logger;
+	}
 	
 	/**
 	 * Actual custom lambda handler hook.
 	 * 
-	 * @param source
-	 * @param target
-	 * @param context
+	 * @param source request body streamed
+	 * @param target response body output
+	 * @param context execution context
 	 */
 	@Override
 	public final void handleRequest(final InputStream source, final OutputStream target, final Context context) {
@@ -160,70 +190,73 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
         	try
         	{
         		Posting deserialized = mapper.fromJson(requesting, Posting.class);
-        		Returns object;
-        		Logging logger;
-        		
-        		if (context != null)
-        		{
-        			logger = new Logging(context.getLogger());
-        		}
-        		else
-        		{
-        			logger = new Logging(null);
-        		}
+        		Returns answer;
 
-        		object = null;
+				answer = new Returns
+					( String.format
+						( "command request '%s' not supported"
+						, deserialized.command
+						)
+					);
         		
         		if (deserialized.command.equalsIgnoreCase("getappdetail") == false)
         		{
-        			final T containerContext = this.prepareRequestContainer(deserialized.command, region, config, logger);
-        			boolean matching = false;
+        			Tracer logger = new Tracer(context != null ? context.getLogger() : null);
 
-            		logger.log
-    	    			( "running '" + deserialized.command + "' with request = " + deserialized.request
-    	    			);
+        			try
+        			{
+        				final T containerContext = this.prepareRequestContainer(deserialized.command, deserialized.trusted, region, config, logger);
 
-            		for (final Handler<T> handler : this.hooks)
-            		{
-            			if (handler != null && handler.getCommandLabel().equalsIgnoreCase(deserialized.command) == true)
-            			{
-            				matching = true;
+	            		this.fixupRequestContainer
+	            			( containerContext
+	            			, deserialized.command
+	            			, deserialized.trusted
+	            			, region
+	            			, config
+	            			, logger
+	            			);
 
-        					object = handler.doSomething(containerContext, requesting, started);
-            				
-                    		if (object != null)
-                    		{
-        	    	        	if (object.results.equalsIgnoreCase("success") == false)
-        	    	        	{
-        	                		logger.log
-        	        	    			( "failure '" + object.results + "'"
-        	        	    			);
-        	    	        	}
-        	    	        	else
-        	    	        	{
-        	                		logger.log
-        	        	    			( "success"
-        	        	    			);
-        	    	        	}
-                    		}
-                    		else
-                    		{
-                    			throw new IOException
-                    				( "Handler logic response came back null"
-                    				);
-                    		}
-            			}
-            		}
-            		
-            		if (matching == false)
-            		{
-        				object = new Returns
-        					( String.format
-        						( "command request '%s' not supported"
-        						, deserialized.command
-        						)
+	            		containerContext.logger.log
+	    	    			( "running '" + deserialized.command + "' with request = " + deserialized.request
+	    	    			);
+	            		
+	            		for (final Handled<T> handler : this.hooks)
+	            		{
+	            			if (handler != null && handler.command.equalsIgnoreCase(deserialized.command) == true)
+	            			{
+	        					Object object = handler.doCommand(containerContext, deserialized.request.toString(), started);
+	            				
+	                    		if (object != null)
+	                    		{
+	                    			containerContext.logger.log
+	    	        	    			( "success"
+	    	        	    			);
+
+	                    			answer = new Returns
+	                    				( "Success"
+	                    				, object
+	                    				);
+	                    		}
+	                    		else
+	                    		{
+	                    			throw new IOException
+	                    				( "Handler logic response came back null"
+	                    				);
+	                    		}
+	            			}
+	            		}
+        			}
+        			catch (IOException eX)
+        			{
+        				throw eX;
+        			}
+        			catch (Exception eX)
+        			{
+        				throw new IOException
+        					( "Unable to initialize container and execute command"
+        					, eX
         					);
-            		}
+        			}
         		}
         		else
         		{
@@ -237,7 +270,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 	                    		( declared 
 	                    		);
 	                        
-		        			object = new Returns
+		        			answer = new Returns
 		        				( "Success"
 		        				, new Version
 		        					( properties.getProperty("detail.name")
@@ -247,7 +280,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
         				}
         				else
         				{
-        					object = new Returns
+        					answer = new Returns
 		        				( "Success"
 		        				, new Version
 		        					( "unknown"
@@ -258,7 +291,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
         			}
         			catch (Exception eX)
         			{
-        				object = new Returns
+        				answer = new Returns
         					( String.format
         						( "failed%s"
         						, eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
@@ -267,7 +300,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
         			}
         		}
         		
-        		responseOf = object != null ? mapper.toJson(object) : "{ }";
+        		responseOf = answer != null ? mapper.toJson(answer) : "{ }";
         	}
         	catch (Exception eX)
         	{
@@ -335,11 +368,14 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 	/**
 	 * Base interface for all handler hooks to process requests. 
 	 */
-	public static interface Handler<T extends ContainerContext> {
+	public static abstract class Handled<T extends ContainerContext> {
+		final String command;
+		
+		public abstract Object doCommand(final T context, final String posting, final Date started) throws IOException;
 
-		Returns doSomething(final T context, final String request, final Date started);
-
-		String getCommandLabel();
+		public Handled(final String commandLabel) {
+			this.command = commandLabel;
+		}
 
 	}
 
@@ -393,14 +429,16 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 	
 	/**
 	 * Construct default.
+	 * 
+	 * @param hooks handler endpoint implementations provided by container
 	 */
-	public MultiEndpointApi(final Handler<T> [] hooks) {
+	protected MultiEndpointApi(final Handled<T> [] hooks) {
 		this.hooks = hooks;
 	}
 
 	/**
 	 * Shared facility.
 	 */
-	private static Gson mapper = new Gson();
+	protected static Gson mapper = new Gson();
 
 }
