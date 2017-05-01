@@ -3,7 +3,7 @@ package com.unowmo.microwrap.tests;
 import java.util.*;
 import java.io.*;
 import org.junit.*;
-import com.google.gson.*;
+import com.fasterxml.jackson.databind.*;
 import com.amazonaws.services.lambda.runtime.*;
 import com.unowmo.microwrap.*;
 
@@ -12,9 +12,9 @@ import com.unowmo.microwrap.*;
  */
 public class ModuleTest {
 
-    private static class MockedApiService extends MultiEndpointApi<MockedApiService.ServiceContext> {
+    private static class MockedApiService extends MultiEndpointApi<MockedApiService.HandleApiContext, MockedApiService.HandleApiWrapper, MockedApiService.HandleApiWrapped> {
         
-        private static abstract class Handler extends MultiEndpointApi.Handled<ServiceContext> {
+        private static abstract class Handler extends MultiEndpointApi.Handled<HandleApiContext, HandleApiWrapped> {
 
             public Handler(String commandLabel) {
                 super(commandLabel);
@@ -22,16 +22,42 @@ public class ModuleTest {
 
         }
 
-        private static class ServiceContext extends MultiEndpointApi.ContainerContext {
+        private static class HandleApiContext extends MultiEndpointApi.ContainerContext {
             
         }
         
-        @Override
-        public ServiceContext prepareRequestContainer(final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException {
-            return new ServiceContext();
+        private static class HandleApiWrapped extends MultiEndpointApi.WrappedResources {
+            
         }
 
-        public MockedApiService() {
+		private static class HandleApiWrapper extends MultiEndpointApi.ResourceWrapping<MockedApiService.HandleApiContext> {
+
+			@Override
+			public void onCommit(final HandleApiContext context, final String command, final String trusted, Date started) {
+			}
+
+			@Override
+			public void close() throws Exception {
+			}
+
+        }
+
+        @Override
+        protected HandleApiContext prepareRequestContainer(final Context context, final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException {
+            return new HandleApiContext();
+        }
+
+		@Override
+		protected HandleApiWrapper allocateResourceWrapper(final HandleApiContext containerContext) throws IOException {
+			return new HandleApiWrapper();
+		}
+        
+		@Override
+		protected HandleApiWrapped allocateWrappedResource(final HandleApiContext containerContext, final HandleApiWrapper resourceWrapper) throws IOException {
+			return new HandleApiWrapped();
+		}
+
+		public MockedApiService() {
             super(new Handler [0]);
         }
 
@@ -44,8 +70,15 @@ public class ModuleTest {
 
         System.out.println("Testing...");
 
-        context.getClientContext().getCustom().put("region", "us-west-2");
-        context.getClientContext().getCustom().put("config", "test");
+        context.getClientContext().getEnvironment().put
+        	( "region"
+        	, "us-west-2"
+        	);
+        
+        context.getClientContext().getEnvironment().put
+        	( "config"
+        	, "test"
+        	);
         
         try (final ByteArrayOutputStream buffer = new ByteArrayOutputStream())
         {
@@ -66,7 +99,7 @@ public class ModuleTest {
                 , context
                 );
             
-            try (Response r = mapper.fromJson(buffer.toString(), Response.class))
+            try (Response r = mapper.readValue(buffer.toString(), Response.class))
             {
                 Assert.assertTrue
                     ( "Failed to access app details"
@@ -238,13 +271,27 @@ public class ModuleTest {
     static class Response implements AutoCloseable {
         public String results = "";
         public String trusted = "";
-        public JsonObject o = null;
+        public JsonNode o = null;
 
         public void close() {
         }
-
+        
     }
-    
-    private static Gson mapper = new Gson();
+
+    /**
+     * Shared facility.
+     */
+    public static ObjectMapper mapper = new ObjectMapper();
+    static {
+		mapper.configure
+			( DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES
+			, false
+			);
+
+		mapper.configure
+			( SerializationFeature.FAIL_ON_EMPTY_BEANS
+			, false
+			);
+    };
 
 }

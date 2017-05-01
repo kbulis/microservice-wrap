@@ -6,8 +6,7 @@ import com.amazonaws.client.builder.*;
 
 /**
  * AWS Lambda handler implementation that decodes deserialized requests and
- * invokes the logic block associated with that command. Request content is
- * made available to the called via deserialization by reflection.
+ * invokes the logic block associated with that command.
  * 
  * This layer tracks initialized AWS service clients as singletons for use
  * during multiple requests processing (yes, we assume the same in-memory
@@ -16,7 +15,7 @@ import com.amazonaws.client.builder.*;
  * @author Kirk Bulis
  *
  */
-public abstract class CachedServiceApi<T extends CachedServiceApi.ContainerContext> extends MultiEndpointApi<T> {
+public abstract class CachedServiceApi<T extends CachedServiceApi.ContainerContext, W extends MultiEndpointApi.ResourceWrapping<T>, R extends MultiEndpointApi.WrappedResources> extends MultiEndpointApi<T, W, R> {
     private final static Map<String, Cacher> servicePool = new HashMap<String, Cacher>();
 
     /**
@@ -130,7 +129,7 @@ public abstract class CachedServiceApi<T extends CachedServiceApi.ContainerConte
      * 
      * @param hooks handler endpoint implementations provided by container
      */
-    protected CachedServiceApi(final Handled<T> [] hooks) {
+    protected CachedServiceApi(final Handled<T, R> [] hooks) {
         super(hooks);
     }
 
