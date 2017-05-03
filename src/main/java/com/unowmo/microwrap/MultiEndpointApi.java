@@ -73,6 +73,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * Event for container to initialize context details using given environment
      * parameters and facilities.
      * 
+     * @param context micro framework facility context
      * @param command request command to process
      * @param trusted request security token
      * @param region location hint for services
@@ -98,6 +99,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * handling.
      * 
      * @param containerContext context for allocation
+     * @param resourceWrapper initializer/manager of wrapped resources
      * @throws IOException raised on any error
      * @return new wrapper for request cycle management
      */
@@ -162,12 +164,12 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                 if (context.getClientContext() != null)
                 {
                     region = context.getClientContext().getEnvironment().getOrDefault
-                        ( "region"
+                        ( "msRegion"
                         , region
                         );
 
                     config = context.getClientContext().getEnvironment().getOrDefault
-                        ( "config"
+                        ( "msConfig"
                         , config
                         );
                 }

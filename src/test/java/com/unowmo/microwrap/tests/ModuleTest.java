@@ -71,12 +71,12 @@ public class ModuleTest {
         System.out.println("Testing...");
 
         context.getClientContext().getEnvironment().put
-        	( "region"
+        	( "msRegion"
         	, "us-west-2"
         	);
         
         context.getClientContext().getEnvironment().put
-        	( "config"
+        	( "msConfig"
         	, "test"
         	);
         
