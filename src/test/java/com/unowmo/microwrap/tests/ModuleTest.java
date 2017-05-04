@@ -43,7 +43,7 @@ public class ModuleTest {
         }
 
         @Override
-        protected HandleApiContext prepareRequestContainer(final Context context, final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException {
+        protected HandleApiContext allocateResourceContext(final String region, final String config) throws IOException {
             return new HandleApiContext();
         }
 
@@ -68,18 +68,10 @@ public class ModuleTest {
         final MockedApiService handler = new MockedApiService();
         final MockedApiContext context = new MockedApiContext();
 
-        System.out.println("Testing...");
+    	context.setInvokedFunctionArn("arn:aws:lambda:us-west-2:0:function:microservice-wrap:test");
 
-        context.getClientContext().getEnvironment().put
-        	( "msRegion"
-        	, "us-west-2"
-        	);
-        
-        context.getClientContext().getEnvironment().put
-        	( "msConfig"
-        	, "test"
-        	);
-        
+    	System.out.println("Testing...");
+
         try (final ByteArrayOutputStream buffer = new ByteArrayOutputStream())
         {
             handler.handleRequest
@@ -134,40 +126,8 @@ public class ModuleTest {
     }
 
     static class MockedApiContext implements Context {
-        private String awsRequestId = "test";
-        private String functionName = "test";
-        private String logGroupName = "test";
-        private String logStreamName = "test";
-        private int memoryLimitInMB = 128;
-        private int remainingTimeInMillis = 15000;
-
-        private ClientContext clientContext = new ClientContext() {
-            private Map<String, String> custom = new HashMap<String, String>();
-            @Override
-            public Map<String, String> getEnvironment() {
-                return this.custom;
-            }
-            @Override
-            public Map<String, String> getCustom() {
-                return this.custom;
-            }
-            @Override
-            public Client getClient() {
-                return null;
-            }
-        };
-
-        private CognitoIdentity identity = new CognitoIdentity() {
-            @Override
-            public String getIdentityId() {
-                return "";
-            }
-            @Override
-            public String getIdentityPoolId() {
-                return "";
-            }
-        };
-        
+    	private String invokedFunctionArn = "";
+    	
         private LambdaLogger logger = new LambdaLogger() {
             @Override
             public void log(String message) {
@@ -177,56 +137,32 @@ public class ModuleTest {
         
         @Override
         public String getAwsRequestId() {
-            return awsRequestId;
-        }
-
-        public void setAwsRequestId(String value) {
-            awsRequestId = value;
+            return "";
         }
 
         @Override
         public ClientContext getClientContext() {
-            return clientContext;
-        }
-
-        public void setClientContext(ClientContext value) {
-            clientContext = value;
+            return null;
         }
 
         @Override
         public String getFunctionName() {
-            return functionName;
-        }
-
-        public void setFunctionName(String value) {
-            functionName = value;
+            return "";
         }
 
         @Override
         public CognitoIdentity getIdentity() {
-            return identity;
-        }
-
-        public void setIdentity(CognitoIdentity value) {
-            identity = value;
+            return null;
         }
 
         @Override
         public String getLogGroupName() {
-            return logGroupName;
-        }
-
-        public void setLogGroupName(String value) {
-            logGroupName = value;
+            return "";
         }
 
         @Override
         public String getLogStreamName() {
-            return logStreamName;
-        }
-
-        public void setLogStreamName(String value) {
-            logStreamName = value;
+            return "";
         }
 
         @Override
@@ -240,25 +176,21 @@ public class ModuleTest {
 
         @Override
         public int getMemoryLimitInMB() {
-            return memoryLimitInMB;
-        }
-
-        public void setMemoryLimitInMB(int value) {
-            memoryLimitInMB = value;
+            return 0;
         }
 
         @Override
         public int getRemainingTimeInMillis() {
-            return remainingTimeInMillis;
-        }
-
-        public void setRemainingTimeInMillis(int value) {
-            remainingTimeInMillis = value;
+            return 0;
         }
 
         @Override
         public String getInvokedFunctionArn() {
-            return null;
+            return this.invokedFunctionArn;
+        }
+
+        public void setInvokedFunctionArn(final String value) {
+        	this.invokedFunctionArn = value;
         }
 
         @Override

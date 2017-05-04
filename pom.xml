@@ -3,7 +3,7 @@
 	<name>MicroserviceWrap</name>
 	<groupId>com.unowmo.code.microservice-wrap</groupId>
 	<artifactId>microservice-wrap</artifactId>
-	<version>1.0.1</version>
+	<version>1.0.2</version>
 	<packaging>jar</packaging>
 	<description>AWS Lambda microservice wrapper for multi-endpoint apis.</description>
 	<url>https://github.com/unowmo/microservice-wrap</url>

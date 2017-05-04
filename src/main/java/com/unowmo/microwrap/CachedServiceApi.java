@@ -1,5 +1,6 @@
 package com.unowmo.microwrap;
 
+import java.io.*;
 import java.util.*;
 import com.amazonaws.*;
 import com.amazonaws.client.builder.*;
@@ -39,8 +40,9 @@ public abstract class CachedServiceApi<T extends CachedServiceApi.ContainerConte
      * @param region location hint for services
      * @param config execution configuration
      * @param logger logging facility
+     * @exception IOException initialization errors
      */
-    protected void fixupRequestContainer(final T context, final String command, final String trusted, final String region, final String config, final Tracer logger) {
+    protected void fixupRequestContainer(final T context, final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException {
         super.fixupRequestContainer(context, command, trusted, region, config, logger);
         
         if (servicePool.containsKey(region) == false)

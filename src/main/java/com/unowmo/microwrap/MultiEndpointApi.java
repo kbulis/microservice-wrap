@@ -35,6 +35,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      */
     public static class ContainerContext {
 
+    	public Params params = null;
         public Tracer logger = null;
         public String detail = null;
 
@@ -70,19 +71,34 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
     }
 
     /**
+     * Simple environment caching of passed or specified process parameters.
+     */
+    public static class Params {
+    	private final Map<String, String> map = new HashMap<String, String>();
+
+    	public String getOrDefault(final String key, final String defaultValue) {
+    		return this.map.getOrDefault(key.toLowerCase(), defaultValue);
+    	}
+    	
+    	public void add(final String key, final String value) {
+    		if (key != null && value != null)
+    		{
+    			this.map.put(key.toLowerCase(), value);
+    		}
+    	}
+
+    }
+
+    /**
      * Event for container to initialize context details using given environment
      * parameters and facilities.
      * 
-     * @param context micro framework facility context
-     * @param command request command to process
-     * @param trusted request security token
      * @param region location hint for services
      * @param config execution configuration
-     * @param logger logging facility
      * @return initialized container context instance
      * @throws IOException raised on any error
      */
-    protected abstract T prepareRequestContainer(final Context context, final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException;
+    protected abstract T allocateResourceContext(final String region, final String config) throws IOException;
 
     /**
      * Event for container to optionally allocate a resource wrapper of request
@@ -116,15 +132,34 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * @param region location hint for services
      * @param config execution configuration
      * @param logger logging facility
+     * @exception IOException initialization errors
      */
-    protected void fixupRequestContainer(final T context, final String command, final String trusted, final String region, final String config, final Tracer logger) {
+    protected void fixupRequestContainer(final T context, final String command, final String trusted, final String region, final String config, final Tracer logger) throws IOException {
         context.detail = String.format
             ( "Processing '%s' with token '%s' in " + region + " as " + config
             , command
             , trusted
             );
-        
+
         context.logger = logger;
+
+        for (final String key : System.getenv().keySet())
+        {
+        	context.params.add
+        		( key
+        		, System.getenv(key)
+        		);
+        }
+
+        context.params.add
+        	( "msRegion"
+        	, region
+        	);
+        
+        context.params.add
+        	( "msConfig"
+        	, config
+        	);
     }
 
     /**
@@ -144,7 +179,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
             // provided by execution container. Though not platform specific,
             // the use of both was born from aws convention.
 
-            String config = "";
+            String config = "prod";
             String region = "";
 
             if (context != null)
@@ -152,26 +187,16 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                 if (context.getInvokedFunctionArn() != null)
                 {
                     String [] arn = context.getInvokedFunctionArn().split(":");
-                    
+
+                    if (arn.length > 7)
+                    {
+                    	config = arn[7].trim();
+                    }
+
                     if (arn.length > 3)
                     {
                         region = arn[3].trim();
-                        
-                        config = "prod";
                     }
-                }
-                
-                if (context.getClientContext() != null)
-                {
-                    region = context.getClientContext().getEnvironment().getOrDefault
-                        ( "msRegion"
-                        , region
-                        );
-
-                    config = context.getClientContext().getEnvironment().getOrDefault
-                        ( "msConfig"
-                        , config
-                        );
                 }
             }
 
@@ -246,7 +271,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 
                     try
                     {
-                        final T containerContext = this.prepareRequestContainer(context, deserialized.command, deserialized.trusted, region, config, logger);
+                        final T containerContext = this.allocateResourceContext(region, config);
 
                         this.fixupRequestContainer
                             ( containerContext
