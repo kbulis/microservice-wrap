@@ -3,6 +3,7 @@ package com.unowmo.microwrap;
 import java.util.*;
 import java.util.concurrent.*;
 import java.io.*;
+import com.fasterxml.jackson.annotation.*;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.annotation.*;
@@ -584,6 +585,10 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 		mapper.configure
 			( SerializationFeature.FAIL_ON_EMPTY_BEANS
 			, false
+			);
+
+		mapper.setSerializationInclusion
+			( JsonInclude.Include.NON_NULL
 			);
     };
 
