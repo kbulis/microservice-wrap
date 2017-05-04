@@ -35,9 +35,9 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      */
     public static class ContainerContext {
 
-    	public Params params = null;
-        public Tracer logger = null;
-        public String detail = null;
+    	public Params params = new Params();
+    	public Tracer logger = new Tracer();
+        public String detail = "";
 
     }
 
@@ -68,6 +68,10 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
             this.delegate = delegate;
         }
 
+        private Tracer() {
+            this.delegate = null;
+        }
+        
     }
 
     /**
