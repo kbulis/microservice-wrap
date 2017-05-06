@@ -109,22 +109,22 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * Event for container to optionally allocate a resource wrapper of request
      * handling.
      * 
-     * @param containerContext context for allocation
+     * @param context context for allocation
      * @throws IOException raised on any error
      * @return new wrapper for request cycle management
      */
-    protected abstract W allocateResourceWrapper(final T containerContext) throws IOException;
+    protected abstract W allocateResourceWrapper(final T context) throws IOException;
 
     /**
      * Event for container to optionally allocate a wrapped resource of request
      * handling.
      * 
-     * @param containerContext context for allocation
-     * @param resourceWrapper initializer/manager of wrapped resources
+     * @param context context for allocation
+     * @param wrapper initializer/manager of wrapped resources
      * @throws IOException raised on any error
      * @return new wrapper for request cycle management
      */
-    protected abstract R allocateWrappedResource(final T containerContext, final W resourceWrapper) throws IOException;
+    protected abstract R allocateWrappedResource(final T context, final W wrapper) throws IOException;
     
     /**
      * Connects and initializes shared context parameters as part of specialized
