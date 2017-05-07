@@ -16,7 +16,7 @@ import com.amazonaws.client.builder.*;
  * @author Kirk Bulis
  *
  */
-public abstract class CachedServiceApi<T extends CachedServiceApi.ContainerContext, W extends MultiEndpointApi.ResourceWrapping<T>, R extends MultiEndpointApi.WrappedResources> extends MultiEndpointApi<T, W, R> {
+public abstract class CachedServiceApi<T extends CachedServiceApi.ContainerContext, W extends MultiEndpointApi.ResourceWrapping<T>, R extends MultiEndpointApi.WrappedResources<T>> extends MultiEndpointApi<T, W, R> {
     private final static Map<String, Cacher> servicePool = new HashMap<String, Cacher>();
 
     /**

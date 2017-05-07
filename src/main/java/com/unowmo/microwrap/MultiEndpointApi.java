@@ -16,7 +16,7 @@ import com.amazonaws.services.lambda.runtime.*;
  * @author Kirk Bulis
  *
  */
-public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerContext, W extends MultiEndpointApi.ResourceWrapping<T>, R extends MultiEndpointApi.WrappedResources> implements RequestStreamHandler {
+public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerContext, W extends MultiEndpointApi.ResourceWrapping<T>, R extends MultiEndpointApi.WrappedResources<T>> implements RequestStreamHandler {
     private final Handled<T, R> [] hooks; 
 
     /**
@@ -25,7 +25,17 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      */
     public static abstract class ResourceWrapping<T extends MultiEndpointApi.ContainerContext> implements AutoCloseable {
 
-    	public abstract void onCommit(final T context, final String command, final String trusted, final Date started);
+    	public abstract void onCommit(final T context, final String command, final String trusted, final Date started) throws IOException;
+
+    }
+
+    /**
+     * Base container implementation for holding onto wrapped resources alive
+     * during request processing and managed by the wrapper. 
+     */
+    public static abstract class WrappedResources<T extends MultiEndpointApi.ContainerContext> {
+
+    	public abstract void onCommit(final T context, final Returns returns, final Date started) throws IOException;
 
     }
 
@@ -39,14 +49,6 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
     	public Params params = new Params();
     	public Tracer logger = new Tracer();
         public String detail = "";
-
-    }
-
-    /**
-     * Base container implementation for holding onto wrapped resources alive
-     * during request processing and managed by the wrapper. 
-     */
-    public static class WrappedResources {
 
     }
 
@@ -260,58 +262,58 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
             
             try
             {
-                Posting deserialized = mapper.readValue(requesting, Posting.class);
-                Returns answer;
+            	Posting posting = mapper.readValue(requesting, Posting.class);
+                Returns returns;
 
-                answer = new Returns
+                returns = new Returns
                     ( String.format
                         ( "command request '%s' not supported"
-                        , deserialized.command
+                        , posting.command
                         )
                     );
                 
-                if (deserialized.command.equalsIgnoreCase("getappdetail") == false)
+                if (posting.command.equalsIgnoreCase("getappdetail") == false)
                 {
                     Tracer logger = new Tracer(context != null ? context.getLogger() : null);
 
                     try
                     {
-                        final T containerContext = this.allocateResourceContext(region, config);
+                        final T contain = this.allocateResourceContext(region, config);
 
                         this.fixupRequestContainer
-                            ( containerContext
-                            , deserialized.command
-                            , deserialized.trusted
+                            ( contain
+                            , posting.command
+                            , posting.trusted
                             , region
                             , config
                             , logger
                             );
 
-                        containerContext.logger.log
-                            ( "running '" + deserialized.command + "' with request = " + deserialized.request
+                        contain.logger.log
+                            ( "running '" + posting.command + "' with request = " + posting.request
                             );
                         
                         for (final Handled<T, R> handled : this.hooks)
                         {
-                            if (handled != null && handled.command.equalsIgnoreCase(deserialized.command) == true)
+                            if (handled != null && handled.command.equalsIgnoreCase(posting.command) == true)
                             {
-                            	try (final W wrapper = this.allocateResourceWrapper(containerContext))
+                            	try (final W wrapper = this.allocateResourceWrapper(contain))
                             	{
-                            		final R wrapped = this.allocateWrappedResource(containerContext, wrapper);
+                            		final R wrapped = this.allocateWrappedResource(contain, wrapper);
 
                             		if (wrapped != null)
                             		{
-		                                Object object = handled.doCommand(containerContext, wrapped, deserialized.request.toString(), started);
+		                                Object object = handled.doCommand(contain, wrapped, posting.request.toString(), started);
 		                                
 		                                if (object != null)
 		                                {
-		                                    containerContext.logger.log
-		                                        ( "success"
-		                                        );
-		
-		                                    answer = new Returns
+		                                	returns = new Returns
 		                                        ( "success"
 		                                        , object
+		                                        );
+
+		                                    contain.logger.log
+		                                        ( "success"
 		                                        );
 		                                }
 		                                else
@@ -320,11 +322,17 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 		                                        ( "Handler logic response came back null"
 		                                        );
 		                                }
-		                                
+
+		                                wrapped.onCommit
+		                                	( contain
+		                                	, returns
+		                                	, started
+		                                	);
+
 		                                wrapper.onCommit
-		                                	( containerContext
-		                                	, deserialized.command
-		                                	, deserialized.trusted
+		                                	( contain
+		                                	, posting.command
+		                                	, posting.trusted
 		                                	, started
 		                                	);
                                 	}
@@ -358,7 +366,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                                 ( declared 
                                 );
                             
-                            answer = new Returns
+                            returns = new Returns
                                 ( "success"
                                 , new Version
                                     ( properties.getProperty("detail.name")
@@ -368,7 +376,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                         }
                         else
                         {
-                            answer = new Returns
+                        	returns = new Returns
                                 ( "success"
                                 , new Version
                                     ( "unknown"
@@ -379,7 +387,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                     }
                     catch (Exception eX)
                     {
-                        answer = new Returns
+                    	returns = new Returns
                             ( String.format
                                 ( "failed%s"
                                 , eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
@@ -388,7 +396,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                     }
                 }
                 
-                responseOf = answer != null ? mapper.writeValueAsString(answer) : "{ }";
+                responseOf = returns != null ? mapper.writeValueAsString(returns) : "{ }";
             }
             catch (Exception eX)
             {
@@ -456,7 +464,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
     /**
      * Base interface for all handler hooks to process requests. 
      */
-    public static abstract class Handled<T extends ContainerContext, R extends WrappedResources> {
+    public static abstract class Handled<T extends ContainerContext, R extends WrappedResources<T>> {
         final String command;
         
         public abstract Object doCommand(final T context, final R wrapped, final String posting, final Date started) throws IOException;
@@ -524,6 +532,8 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
     public static class Returns {
 
         public String results = "";
+        public String trusted = "";
+
         public Object o = null;
         
         public Returns(final String results, final Object o) {

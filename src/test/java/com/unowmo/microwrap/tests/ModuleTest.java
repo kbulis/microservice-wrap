@@ -26,8 +26,12 @@ public class ModuleTest {
             
         }
         
-        private static class HandleApiWrapped extends MultiEndpointApi.WrappedResources {
+        private static class HandleApiWrapped extends MultiEndpointApi.WrappedResources<MockedApiService.HandleApiContext> {
             
+			@Override
+			public void onCommit(final HandleApiContext context, final Returns returns, Date started) {
+			}
+
         }
 
 		private static class HandleApiWrapper extends MultiEndpointApi.ResourceWrapping<MockedApiService.HandleApiContext> {
