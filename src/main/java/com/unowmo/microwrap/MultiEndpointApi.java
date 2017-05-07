@@ -7,6 +7,8 @@ import com.fasterxml.jackson.annotation.*;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.annotation.*;
+import com.amazonaws.services.lambda.*;
+import com.amazonaws.services.lambda.model.*;
 import com.amazonaws.services.lambda.runtime.*;
 
 /**
@@ -25,7 +27,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      */
     public static abstract class ResourceWrapping<T extends MultiEndpointApi.ContainerContext> implements AutoCloseable {
 
-    	public abstract void onCommit(final T context, final String command, final String trusted, final Date started) throws IOException;
+        public abstract void onCommit(final T context, final Date started) throws IOException;
 
     }
 
@@ -35,7 +37,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      */
     public static abstract class WrappedResources<T extends MultiEndpointApi.ContainerContext> {
 
-    	public abstract void onCommit(final T context, final Returns returns, final Date started) throws IOException;
+        public abstract void onCommit(final T context, final Returns returns, final Date started) throws IOException;
 
     }
 
@@ -45,10 +47,65 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * define a default constructor. 
      */
     public static class ContainerContext {
-
-    	public Params params = new Params();
-    	public Tracer logger = new Tracer();
+        private List<Entry> events = new ArrayList<Entry>();
+        
+        public Params params = new Params();
+        public Tracer logger = new Tracer();
+        public String region = "";
+        public String config = "";
         public String detail = "";
+
+        private static class Entry {
+            
+            final String service;
+            final String qualify;
+            final String payload;
+            
+            Entry(final String service, final String qualify, final String payload) {
+                this.service = service;
+                this.qualify = qualify;
+                this.payload = payload;
+            }
+
+        }
+        
+        public void queueRequest(final String serviceName, final String qualifier, final String payload) {
+            this.events.add(new Entry(serviceName, qualifier, payload));
+        }
+
+        void onCommit(final Date started) throws IOException {
+        	if (this.config.equalsIgnoreCase("test") == true)
+        	{
+        		return;
+        	}
+
+            if (this.events.isEmpty() == true)
+            {
+                return;
+            }
+            
+            try
+            {
+                AWSLambda lam = AWSLambdaClientBuilder.standard().withRegion(this.region).build();
+
+                for (final Entry entry : this.events)
+                {
+                    lam.invoke
+                        ( new InvokeRequest()
+                            .withFunctionName(entry.service)
+                            .withQualifier(entry.qualify)
+                            .withInvocationType(InvocationType.Event)
+                            .withPayload
+                                ( entry.payload
+                                )
+                        );                    
+                }
+            }
+            finally
+            {
+                this.events.clear();
+            }
+        }
 
     }
 
@@ -81,18 +138,18 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * Simple environment caching of passed or specified process parameters.
      */
     public static class Params {
-    	private final Map<String, String> map = new HashMap<String, String>();
+        private final Map<String, String> map = new HashMap<String, String>();
 
-    	public String getOrDefault(final String key, final String defaultValue) {
-    		return this.map.getOrDefault(key.toLowerCase(), defaultValue);
-    	}
-    	
-    	public void add(final String key, final String value) {
-    		if (key != null && value != null)
-    		{
-    			this.map.put(key.toLowerCase(), value);
-    		}
-    	}
+        public String getOrDefault(final String key, final String defaultValue) {
+            return this.map.getOrDefault(key.toLowerCase(), defaultValue);
+        }
+        
+        public void add(final String key, final String value) {
+            if (key != null && value != null)
+            {
+                this.map.put(key.toLowerCase(), value);
+            }
+        }
 
     }
 
@@ -152,21 +209,21 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 
         for (final String key : System.getenv().keySet())
         {
-        	context.params.add
-        		( key
-        		, System.getenv(key)
-        		);
+            context.params.add
+                ( key
+                , System.getenv(key)
+                );
         }
 
         context.params.add
-        	( "msRegion"
-        	, region
-        	);
+            ( "msRegion"
+            , context.region = region
+            );
         
         context.params.add
-        	( "msConfig"
-        	, config
-        	);
+            ( "msConfig"
+            , context.config = config
+            );
     }
 
     /**
@@ -197,7 +254,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 
                     if (arn.length > 7)
                     {
-                    	config = arn[7].trim();
+                        config = arn[7].trim();
                     }
 
                     if (arn.length > 3)
@@ -262,7 +319,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
             
             try
             {
-            	Posting posting = mapper.readValue(requesting, Posting.class);
+                Posting posting = mapper.readValue(requesting, Posting.class);
                 Returns returns;
 
                 returns = new Returns
@@ -297,48 +354,50 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                         {
                             if (handled != null && handled.command.equalsIgnoreCase(posting.command) == true)
                             {
-                            	try (final W wrapper = this.allocateResourceWrapper(contain))
-                            	{
-                            		final R wrapped = this.allocateWrappedResource(contain, wrapper);
+                                try (final W wrapper = this.allocateResourceWrapper(contain))
+                                {
+                                    final R wrapped = this.allocateWrappedResource(contain, wrapper);
 
-                            		if (wrapped != null)
-                            		{
-		                                Object object = handled.doCommand(contain, wrapped, posting.request.toString(), started);
-		                                
-		                                if (object != null)
-		                                {
-		                                	returns = new Returns
-		                                        ( "success"
-		                                        , object
-		                                        );
+                                    if (wrapped != null)
+                                    {
+                                        Object object = handled.doCommand(contain, wrapped, posting.request.toString(), started);
+                                        
+                                        if (object != null)
+                                        {
+                                            returns = new Returns
+                                                ( "success"
+                                                , object
+                                                );
 
-		                                    contain.logger.log
-		                                        ( "success"
-		                                        );
-		                                }
-		                                else
-		                                {
-		                                    throw new IOException
-		                                        ( "Handler logic response came back null"
-		                                        );
-		                                }
+                                            contain.logger.log
+                                                ( "success"
+                                                );
+                                        }
+                                        else
+                                        {
+                                            throw new IOException
+                                                ( "Handler logic response came back null"
+                                                );
+                                        }
 
-		                                wrapped.onCommit
-		                                	( contain
-		                                	, returns
-		                                	, started
-		                                	);
+                                        wrapped.onCommit
+                                            ( contain
+                                            , returns
+                                            , started
+                                            );
 
-		                                wrapper.onCommit
-		                                	( contain
-		                                	, posting.command
-		                                	, posting.trusted
-		                                	, started
-		                                	);
-                                	}
-                            	}
-                            	
-                            	break;
+                                        wrapper.onCommit
+                                            ( contain
+                                            , started
+                                            );
+                                        
+                                        contain.onCommit
+                                        	( started
+                                        	);
+                                    }
+                                }
+                                
+                                break;
                             }
                         }
                     }
@@ -376,7 +435,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                         }
                         else
                         {
-                        	returns = new Returns
+                            returns = new Returns
                                 ( "success"
                                 , new Version
                                     ( "unknown"
@@ -387,7 +446,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                     }
                     catch (Exception eX)
                     {
-                    	returns = new Returns
+                        returns = new Returns
                             ( String.format
                                 ( "failed%s"
                                 , eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
@@ -478,51 +537,51 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
     /**
      * Container for processing. 
      */
-	@JsonDeserialize(using=Posting.Deserializer.class)
+    @JsonDeserialize(using=Posting.Deserializer.class)
     public static class Posting {
 
         public String command = "";
         public String trusted = "";
         public String request = "";
 
-		public static class Deserializer extends JsonDeserializer<Posting> {
+        public static class Deserializer extends JsonDeserializer<Posting> {
 
-			@Override
-		    public Posting deserialize(JsonParser parser, DeserializationContext context) throws IOException, JsonProcessingException {
-		    	Posting that = new Posting();
-		    	
-		    	try
-		    	{
-		    		JsonNode node = parser.getCodec().readTree(parser);
-		    		
-		    		if (node.get("command") != null)
-		    		{
-		    			that.command = node.get("command").asText("?").trim();
-		    		}
+            @Override
+            public Posting deserialize(JsonParser parser, DeserializationContext context) throws IOException, JsonProcessingException {
+                Posting that = new Posting();
+                
+                try
+                {
+                    JsonNode node = parser.getCodec().readTree(parser);
+                    
+                    if (node.get("command") != null)
+                    {
+                        that.command = node.get("command").asText("?").trim();
+                    }
 
-		    		if (node.get("trusted") != null)
-		    		{
-		    			that.trusted = node.get("trusted").asText("").trim();
-		    		}
+                    if (node.get("trusted") != null)
+                    {
+                        that.trusted = node.get("trusted").asText("").trim();
+                    }
 
-		    		if (node.get("request") != null)
-		    		{
-		    			that.request = node.get("request").toString().trim();
-		    		}
-		    	}
-		    	catch (JsonProcessingException eX)
-		    	{
-		    		throw eX;
-		    	}
-		    	catch (IOException eX)
-		    	{
-		    		throw eX;
-		    	}
-		    	
-		    	return that;
-		    }
+                    if (node.get("request") != null)
+                    {
+                        that.request = node.get("request").toString().trim();
+                    }
+                }
+                catch (JsonProcessingException eX)
+                {
+                    throw eX;
+                }
+                catch (IOException eX)
+                {
+                    throw eX;
+                }
+                
+                return that;
+            }
 
-		}
+        }
         
     }
 
@@ -569,8 +628,8 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      * Container for processing.
      */
     public static class Options {
-    	
-    	public String region = "";
+        
+        public String region = "";
     }
 
     /**
@@ -587,19 +646,19 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
      */
     public static ObjectMapper mapper = new ObjectMapper();
     static {
-		mapper.configure
-			( DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES
-			, false
-			);
+        mapper.configure
+            ( DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES
+            , false
+            );
 
-		mapper.configure
-			( SerializationFeature.FAIL_ON_EMPTY_BEANS
-			, false
-			);
+        mapper.configure
+            ( SerializationFeature.FAIL_ON_EMPTY_BEANS
+            , false
+            );
 
-		mapper.setSerializationInclusion
-			( JsonInclude.Include.NON_NULL
-			);
+        mapper.setSerializationInclusion
+            ( JsonInclude.Include.NON_NULL
+            );
     };
 
 }

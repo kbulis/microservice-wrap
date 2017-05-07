@@ -37,7 +37,7 @@ public class ModuleTest {
 		private static class HandleApiWrapper extends MultiEndpointApi.ResourceWrapping<MockedApiService.HandleApiContext> {
 
 			@Override
-			public void onCommit(final HandleApiContext context, final String command, final String trusted, Date started) {
+			public void onCommit(final HandleApiContext context, Date started) {
 			}
 
 			@Override
