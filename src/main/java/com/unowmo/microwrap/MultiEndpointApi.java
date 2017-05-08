@@ -380,21 +380,62 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                                                 );
                                         }
 
-                                        wrapped.onCommit
-                                            ( contain
-                                            , returns
-                                            , started
-                                            );
+                                        try
+                                        {
+	                                        wrapped.onCommit
+	                                            ( contain
+	                                            , returns
+	                                            , started
+	                                            );
+                                        }
+                                        catch (Exception eX)
+                                        {
+                                        	throw new IOException
+                                        		( "wrapped failed to commit"
+                                        		, eX
+                                        		);
+                                        }
 
-                                        wrapper.onCommit
-                                            ( contain
-                                            , started
-                                            );
-                                        
-                                        contain.onCommit
-                                        	( started
-                                        	);
+                                        try
+                                        {
+	                                        wrapper.onCommit
+	                                            ( contain
+	                                            , started
+	                                            );
+                                        }
+                                        catch (Exception eX)
+                                        {
+                                        	throw new IOException
+                                        		( "wrapper failed to commit"
+                                        		, eX
+                                        		);
+                                        }
+
+                                        try
+                                        {
+	                                        contain.onCommit
+	                                        	( started
+	                                        	);
+                                        }
+                                        catch (Exception eX)
+                                        {
+                                        	throw new IOException
+                                        		( "context failed to commit"
+                                        		, eX
+                                        		);
+                                        }
                                     }
+                                }
+                                catch (IOException eX)
+                                {
+                                	throw eX;
+                                }
+                                catch (Exception eX)
+                                {
+                                	throw new IOException
+                                		( "Unable to wrap and execute request handling"
+                                		, eX
+                                		);
                                 }
                                 
                                 break;
@@ -408,7 +449,7 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
                     catch (Exception eX)
                     {
                         throw new IOException
-                            ( "Unable to initialize container and execute command"
+                            ( "Unable to initialize container"
                             , eX
                             );
                     }
@@ -510,12 +551,15 @@ public abstract class MultiEndpointApi<T extends MultiEndpointApi.ContainerConte
 
             if (context != null)
             {
-                context.getLogger().log
-                    ( String.format
-                        ( "failed%s"
-                        , eX.getMessage() != null ? " because " + eX.getMessage().toLowerCase() : ""
-                        )
-                    );
+            	for (Throwable tX = eX; tX != null; tX = tX.getCause())
+            	{
+	                context.getLogger().log
+	                    ( String.format
+	                        ( "failed%s"
+	                        , tX.getMessage() != null ? " because " + tX.getMessage().toLowerCase() : ""
+	                        )
+	                    );
+            	}
             }
         }
     }
