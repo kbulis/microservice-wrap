@@ -9,5 +9,5 @@
 
 ISC © [Kirk Bulis](http://github.com/kbulis)
 
-[travis-image]: https://travis-ci.org/unowmo/generator-appapi-boilerplate.svg?branch=master
-[travis-url]: https://travis-ci.org/unowmo/generator-appapi-boilerplate
+[travis-image]: https://travis-ci.org/kbulis/microservice-wrap.svg?branch=master
+[travis-url]: https://travis-ci.org/kbulis/microservice-wrap
