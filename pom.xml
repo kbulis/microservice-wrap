@@ -9,8 +9,8 @@
 	<url>https://github.com/kbulis/microservice-wrap</url>
 	<licenses>
 		<license>
-			<name>MIT License</name>
-			<url>https://opensource.org/licenses/mit-license.php</url>
+			<name>ISC License</name>
+			<url>https://opensource.org/licenses/ISC</url>
 		</license>
 	</licenses>
 	<developers>
