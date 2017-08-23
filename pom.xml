@@ -3,10 +3,10 @@
 	<name>MicroserviceWrap</name>
 	<groupId>com.unowmo.code.microservice-wrap</groupId>
 	<artifactId>microservice-wrap</artifactId>
-	<version>1.0.3</version>
+	<version>1.0.4</version>
 	<packaging>jar</packaging>
 	<description>AWS Lambda microservice wrapper for multi-endpoint apis.</description>
-	<url>https://github.com/unowmo/microservice-wrap</url>
+	<url>https://github.com/kbulis/microservice-wrap</url>
 	<licenses>
 		<license>
 			<name>MIT License</name>
@@ -16,15 +16,15 @@
 	<developers>
 		<developer>
 			<name>Kirk Bulis</name>
-			<email>kirk@unowmo.com</email>
+			<email>kirk.d.bulis@gmail.com</email>
 			<organization>UNowMo, LLC</organization>
 			<organizationUrl>http://unowmo.com</organizationUrl>
 		</developer>
 	</developers>
 	<scm>
-		<connection>scm:git:git://github.com/unowmo/microservice-wrap.git</connection>
-		<developerConnection>scm:git:ssh://git@github.com:unowmo/microservice-wrap.git</developerConnection>
-		<url>https://github.com/unowmo/microservice-wrap/tree/master</url>
+		<connection>scm:git:git://github.com/kbulis/microservice-wrap.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com:kbulis/microservice-wrap.git</developerConnection>
+		<url>https://github.com/kbulis/microservice-wrap/tree/master</url>
 	</scm>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
